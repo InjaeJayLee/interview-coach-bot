@@ -19,7 +19,12 @@ def _parse_profile_output(raw: str) -> tuple[str, list[str]]:
     
     if "[2]" in text:
         before, after = text.split("[2]", 1)
-        profile_summary = before.strip()
+        # [1] profile_summary 라벨 제거
+        before_lines = before.strip().splitlines()
+        if before_lines and before_lines[0].strip().startswith("[1]"):
+            before_lines = before_lines[1:]
+        profile_summary = "\n".join(before_lines).strip()
+
         focus_block = after
     else:
         # 혹시 "[2]"를 안 지켰으면 그냥 전체를 summary로 쓰고 끝
@@ -39,7 +44,7 @@ def _parse_profile_output(raw: str) -> tuple[str, list[str]]:
     return profile_summary, focus_areas
 
 
-def profile_nodes(state: InterviewState) -> InterviewState:
+def profile_node(state: InterviewState) -> InterviewState:
     """
     이력서/경력기술서 + JD + career_note(optional)를 기반으로
     - profile_summary
@@ -71,6 +76,7 @@ def profile_nodes(state: InterviewState) -> InterviewState:
     )
 
     raw_output = response.choices[0].message.content or ""
+
     profile_summary, focus_areas = _parse_profile_output(raw_output)
 
     new_state: InterviewState = {
@@ -78,4 +84,5 @@ def profile_nodes(state: InterviewState) -> InterviewState:
         "profile_summary": profile_summary,
         "focus_areas": focus_areas,
     }
+
     return new_state

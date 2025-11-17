@@ -11,7 +11,7 @@ class InterviewState(TypedDict, total=False):
 
     # 사전 정보 기반 요약/해석 결과
     profile_summary: str        # 이력서 + JD 기반으로 정리한 요약 프로필
-    focus_area: list[str]       # 면접에서 중점적으로 파고들 포인트 리스트
+    focus_areas: list[str]       # 면접에서 중점적으로 파고들 포인트 리스트
 
     # 현재 인터뷰 Q&A
     question: str               # 현재 질문
