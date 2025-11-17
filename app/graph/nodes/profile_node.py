@@ -37,3 +37,45 @@ def _parse_profile_output(raw: str) -> tuple[str, list[str]]:
                 focus_areas.append(item)
 
     return profile_summary, focus_areas
+
+
+def profile_nodes(state: InterviewState) -> InterviewState:
+    """
+    이력서/경력기술서 + JD + career_note(optional)를 기반으로
+    - profile_summary
+    - focus_areas
+    를 생성해서 state에 채워넣는 노드.
+    """
+    resume_text = state.get("resume_text", "") or ""
+    job_description = state.get("job_description", "") or ""
+    career_note = state.get("career_note", "") or ""
+
+    if not resume_text.strip():
+        raise ValueError("resume_text가 비어 있습니다. 이력서/경력기술서를 입력해 주세요.")
+    if not job_description.strip():
+        raise ValueError("job_description이 비어 있습니다. JD 텍스트를 입력해 주세요.")
+
+    user_prompt = build_profile_user_prompt(
+        resume_text=resume_text,
+        job_description=job_description,
+        career_note=career_note or None,
+    )
+
+    response = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[
+            {"role": "system", "content": PROFILE_SUMMARY_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.3,
+    )
+
+    raw_output = response.choices[0].message.content or ""
+    profile_summary, focus_areas = _parse_profile_output(raw_output)
+
+    new_state: InterviewState = {
+        **state,
+        "profile_summary": profile_summary,
+        "focus_areas": focus_areas,
+    }
+    return new_state
