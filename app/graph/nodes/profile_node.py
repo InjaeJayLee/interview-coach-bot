@@ -51,9 +51,9 @@ def profile_node(state: InterviewState) -> InterviewState:
     - focus_areas
     를 생성해서 state에 채워넣는 노드.
     """
-    resume_text = state.get("resume_text", "") or ""
-    job_description = state.get("job_description", "") or ""
-    career_note = state.get("career_note", "") or ""
+    resume_text = state.get("resume_text", "")
+    job_description = state.get("job_description", "")
+    career_note = state.get("career_note", "")
 
     if not resume_text.strip():
         raise ValueError("resume_text가 비어 있습니다. 이력서/경력기술서를 입력해 주세요.")

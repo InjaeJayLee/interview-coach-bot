@@ -1,9 +1,9 @@
-from app.graph.graph_builder import build_profile_graph
+from app.graph.graph_builder import build_graph
 from app.graph.state import InterviewState
 
 
 def main():
-    graph_app = build_profile_graph()
+    graph_app = build_graph()
 
     # 테스트용
     sample_resume = """
@@ -35,10 +35,15 @@ def main():
     print("===== [PROFILE SUMMARY] =====")
     print(final_state.get("profile_summary", "").strip())
     print()
+
     print("===== [FOCUS AREAS] =====")
-    focus_areas = final_state.get("focus_areas") or []
+    focus_areas = final_state.get("focus_areas", [])
     for i, item in enumerate(focus_areas, start=1):
         print(f"{i}. {item}")
+    print()
+
+    print("===== [GENERATED QUESTION] =====")
+    print(final_state.get("question", "").strip())
 
 
 if __name__ == "__main__":
