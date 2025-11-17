@@ -20,6 +20,8 @@ PROFILE_SUMMARY_SYSTEM_PROMPT = """
 - 면접에서 깊게 파고들어야 할 포인트를 bullet list로 3~7개 정도 작성합니다.
 - 각 bullet은 한 줄로 짧게, 그러나 구체적으로 작성합니다.
 - 예: "- 대규모 트래픽 환경에서의 로그 기반 분석 경험"
+
+주의사항: 반드시 [1] profile_summary, [2] focus_areas 구조를 지켜야합니다.
 """
 
 
