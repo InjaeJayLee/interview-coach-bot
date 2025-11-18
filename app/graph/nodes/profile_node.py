@@ -1,6 +1,6 @@
 from app.config import client, DEFAULT_MODEL
 from app.graph.state import InterviewState
-from app.prompts.profile_prompts import PROFILE_SUMMARY_SYSTEM_PROMPT, build_profile_user_prompt
+from app.prompts.profile_prompts import PROFILE_SUMMARY_SYSTEM_PROMPT, build_profile_prompt
 
 
 def _parse_profile_output(raw: str) -> tuple[str, list[str]]:
@@ -60,7 +60,7 @@ def profile_node(state: InterviewState) -> InterviewState:
     if not job_description.strip():
         raise ValueError("job_description이 비어 있습니다. JD 텍스트를 입력해 주세요.")
 
-    user_prompt = build_profile_user_prompt(
+    user_prompt = build_profile_prompt(
         resume_text=resume_text,
         job_description=job_description,
         career_note=career_note or None,

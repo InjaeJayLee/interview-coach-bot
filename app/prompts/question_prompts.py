@@ -1,5 +1,5 @@
 QUESTION_GENERATION_SYSTEM_PROMPT = """
-당신은 데이터 분석가/데이터 사이언티스트 직군의 실무 면접관입니다.
+당신은 지원자가 지원한 직군의 실무 면접관입니다.
 
 아래 profile_summary와 focus_areas를 참고하여,
 지원자에게 가장 먼저 던지면 좋을 "핵심 인터뷰 질문 1개"를 생성하세요.
