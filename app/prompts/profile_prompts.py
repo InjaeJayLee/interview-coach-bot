@@ -43,14 +43,12 @@ def build_profile_prompt(resume_text: str, job_description: str, career_note: st
 
     career_note_block = ""
     if career_note:
-        career_note_block = f"[추가 자기소개/설명]\n{career_note}\n"
+        career_note_block = f"\n[추가 자기소개/설명]\n{career_note}\n"
 
     user_prompt = f"""
         [지원자의 이력서/경력기술서]
         {resume_text}
-
         {career_note_block}
-        
         [지원 포지션 JD]
         {job_description}
 

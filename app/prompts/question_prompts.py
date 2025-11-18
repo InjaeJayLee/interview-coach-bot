@@ -18,7 +18,7 @@ def build_question_prompt(profile_summary: str, focus_areas: list[str]) -> str:
     return f"""
         [profile_summary]
         {profile_summary}
-
+        
         [focus_areas]
         {focus_block}
 
