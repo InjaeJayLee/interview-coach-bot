@@ -14,13 +14,13 @@ def question_node(state: InterviewState) -> InterviewState:
     if not profile_summary.strip():
         raise ValueError("profile_summary가 비어 있어 질문을 생성할 수 없습니다.")
     
-    user_prompt = build_question_prompt(profile_summary, focus_areas)
+    question_prompt = build_question_prompt(profile_summary, focus_areas)
 
     response = client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[
             {"role": "system", "content": QUESTION_GENERATION_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": question_prompt}
         ],
         temperature=0.4,
     )

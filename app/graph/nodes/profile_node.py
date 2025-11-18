@@ -60,7 +60,7 @@ def profile_node(state: InterviewState) -> InterviewState:
     if not job_description.strip():
         raise ValueError("job_description이 비어 있습니다. JD 텍스트를 입력해 주세요.")
 
-    user_prompt = build_profile_prompt(
+    profile_prompt = build_profile_prompt(
         resume_text=resume_text,
         job_description=job_description,
         career_note=career_note or None,
@@ -70,7 +70,7 @@ def profile_node(state: InterviewState) -> InterviewState:
         model=DEFAULT_MODEL,
         messages=[
             {"role": "system", "content": PROFILE_SUMMARY_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": profile_prompt},
         ],
         temperature=0.3,
     )
