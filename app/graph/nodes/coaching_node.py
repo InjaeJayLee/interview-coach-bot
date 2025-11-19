@@ -1,4 +1,4 @@
-from app.config import client, DEFAULT_MODEL
+from app.llm.client import llm
 from app.graph.state import InterviewState
 from app.prompts.coaching_prompts import INTERVIEW_COACH_SYSTEM_PROMPT, build_coaching_prompt
 
@@ -16,23 +16,20 @@ def coaching_node(state: InterviewState) -> InterviewState:
         raise ValueError("question이 비어 있어 코칭을 수행할 수 없습니다.")
     if not answer:
         raise ValueError("answer가 비어 있어 코칭을 수행할 수 없습니다.")
-    
+
     coaching_prompt = build_coaching_prompt(
         question=question,
         answer=answer,
         profile_summary=profile_summary or None,
     )
 
-    response = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+    feedback = llm.chat(
         messages=[
             {"role": "system", "content": INTERVIEW_COACH_SYSTEM_PROMPT},
             {"role": "user", "content": coaching_prompt}
         ],
         temperature=0.4,
     )
-
-    feedback = (response.choices[0].message.content or "").strip()
 
     new_state: InterviewState = {
         **state,

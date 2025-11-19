@@ -3,7 +3,7 @@ from app.graph.state import InterviewState
 
 
 def main():
-    graph_app = build_graph()
+    graph = build_graph()
 
     # 테스트용
     sample_resume = """
@@ -42,7 +42,7 @@ def main():
         "answer": sample_answer,
     }
 
-    final_state = graph_app.invoke(init_state)
+    final_state = graph.invoke(init_state)
 
     print("===== [PROFILE SUMMARY] =====")
     print(final_state.get("profile_summary", "").strip())

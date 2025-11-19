@@ -1,9 +1,9 @@
-from app.config import client, DEFAULT_MODEL
+from app.llm.client import llm
 from app.graph.state import InterviewState
 from app.prompts.profile_prompts import PROFILE_SUMMARY_SYSTEM_PROMPT, build_profile_prompt
 
 
-def _parse_profile_output(raw: str) -> tuple[str, list[str]]:
+def _parse_profile_output(output: str) -> tuple[str, list[str]]:
     """
     LLM이 생성한 텍스트에서
     - profile_summary (문단)
@@ -14,7 +14,8 @@ def _parse_profile_output(raw: str) -> tuple[str, list[str]]:
     bullet(-, •) 줄들을 focus_areas로 간주.
     """
 
-    text = raw.strip()
+    text = output.strip()
+    profile_summary = text
     focus_areas = []
     
     if "[2]" in text:
@@ -66,8 +67,7 @@ def profile_node(state: InterviewState) -> InterviewState:
         career_note=career_note or None,
     )
 
-    response = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+    content = llm.chat(
         messages=[
             {"role": "system", "content": PROFILE_SUMMARY_SYSTEM_PROMPT},
             {"role": "user", "content": profile_prompt},
@@ -75,9 +75,7 @@ def profile_node(state: InterviewState) -> InterviewState:
         temperature=0.3,
     )
 
-    raw_output = response.choices[0].message.content or ""
-
-    profile_summary, focus_areas = _parse_profile_output(raw_output)
+    profile_summary, focus_areas = _parse_profile_output(content)
 
     new_state: InterviewState = {
         **state,

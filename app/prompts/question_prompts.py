@@ -10,6 +10,7 @@ QUESTION_GENERATION_SYSTEM_PROMPT = """
 - 너무 광범위한 질문(자기소개, 지원동기 등)은 피할 것
 - 구체적이고 실무 기반일 것
 - 오직 하나의 질문 문장만 출력할 것 (앞뒤 설명, 번호, 불릿 금지)
+- 질문이 너무 길지 않을 것 (공백 포함 했을 때 글자수 140자 이내)
 """
 
 
@@ -18,7 +19,7 @@ def build_question_prompt(profile_summary: str, focus_areas: list[str]) -> str:
     return f"""
         [profile_summary]
         {profile_summary}
-        
+
         [focus_areas]
         {focus_block}
 

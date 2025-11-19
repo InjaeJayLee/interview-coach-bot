@@ -1,4 +1,4 @@
-from app.config import client, DEFAULT_MODEL
+from app.llm.client import llm
 from app.graph.state import InterviewState
 from app.prompts.question_prompts import QUESTION_GENERATION_SYSTEM_PROMPT, build_question_prompt
 
@@ -16,16 +16,13 @@ def question_node(state: InterviewState) -> InterviewState:
     
     question_prompt = build_question_prompt(profile_summary, focus_areas)
 
-    response = client.chat.completions.create(
-        model=DEFAULT_MODEL,
+    content = llm.chat(
         messages=[
             {"role": "system", "content": QUESTION_GENERATION_SYSTEM_PROMPT},
             {"role": "user", "content": question_prompt}
         ],
         temperature=0.4,
     )
-
-    content = (response.choices[0].message.content or "").strip()
 
     new_state: InterviewState = {
         **state,

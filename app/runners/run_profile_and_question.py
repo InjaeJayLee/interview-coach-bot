@@ -1,9 +1,9 @@
-from app.graph.graph_builder import build_graph
+from app.graph.graph_builder import build_profile_question_graph
 from app.graph.state import InterviewState
 
 
 def main():
-    graph_app = build_graph()
+    graph = build_profile_question_graph()
 
     # 테스트용
     sample_resume = """
@@ -30,7 +30,7 @@ def main():
         # "career_note": "추가로 어필하고 싶은 내용이 있다면 여기에.",
     }
 
-    final_state = graph_app.invoke(init_state)
+    final_state = graph.invoke(init_state)
 
     print("===== [PROFILE SUMMARY] =====")
     print(final_state.get("profile_summary", "").strip())
