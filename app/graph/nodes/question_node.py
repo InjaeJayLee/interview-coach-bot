@@ -26,10 +26,6 @@ def question_node(state: InterviewState) -> InterviewState:
     )
 
     content = (response.choices[0].message.content or "").strip()
-    # if content.startswith(("1.", "1)", "- ")):
-    #     parts = content.split(maxsplit=1)
-    #     if len(parts) == 2:
-    #         content = parts[1].strip()
 
     new_state: InterviewState = {
         **state,

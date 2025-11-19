@@ -6,6 +6,21 @@ from app.graph.nodes.question_node import question_node
 from app.graph.nodes.coaching_node import coaching_node
 
 
+def build_profile_question_graph():
+    graph = StateGraph(InterviewState)
+
+    graph.add_node("profile_node", profile_node)
+    graph.add_node("question_node", question_node)
+    
+    graph.set_entry_point("profile_node")
+
+    graph.add_edge("profile_node", "question_node")
+    graph.add_edge("question_node", END)
+
+    app = graph.compile()
+    return app
+
+
 def build_graph():
     graph = StateGraph(InterviewState)
 
