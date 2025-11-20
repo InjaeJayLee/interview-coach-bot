@@ -1,11 +1,31 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from uuid import uuid4
 
 from app.graph.graph_builder import build_profile_question_graph
 from app.graph.nodes.coaching_node import coaching_node
+from app.graph.nodes.question_node import question_node
 from app.graph.state import InterviewState
 
+
+MAX_QUESTIONS_PER_SESSION = 5
+
+class QAHistoryItem(BaseModel):
+    question: str
+    answer: str
+    feedback: str
+
+
+class SessionData(BaseModel):
+    session_id: str
+    profile_summary: str
+    focus_areas: list[str]
+    previous_questions: list[str]
+    history: list[QAHistoryItem]
+
+
+SESSIONS: dict[str, SessionData] = {}
 
 # FastAPI 인스턴스 생성
 app = FastAPI(
@@ -36,6 +56,33 @@ class CoachingRequest(BaseModel):
 
 class CoachingResponse(BaseModel):
     feedback: str
+
+
+# 세션용
+class SessionInitRequest(BaseModel):
+    resume_text: str
+    job_description: str
+    career_note: Optional[str] = None
+
+
+class SessionInitResponse(BaseModel):
+    session_id: str
+    profile_summary: str
+    focus_areas: list[str]
+    question: str
+
+
+class SessionAnswerRequest(BaseModel):
+    session_id: str
+    answer: str
+
+
+class SessionAnswerResponse(BaseModel):
+    question: str       
+    answer: str
+    feedback: str
+    next_question: Optional[str] = None
+    finished: bool
 
 
 @app.get("/health")
@@ -78,3 +125,96 @@ def coach_answer(req: CoachingRequest):
     feedback = final_state.get("feedback", "").strip()
 
     return CoachingResponse(feedback=feedback)
+
+
+@app.post("/api/v1/interview/session/init", response_model=SessionInitResponse)
+def session_init(req: SessionInitRequest):
+    init_state: InterviewState = {
+        "resume_text": req.resume_text,
+        "job_description": req.job_description,
+    }
+    if req.career_note:
+        init_state["career_note"] = req.career_note
+
+    final_state = graph.invoke(init_state)
+
+    profile_summary = final_state.get("profile_summary", "").strip()
+    focus_areas = final_state.get("focus_areas", [])
+    question = final_state.get("question", "").strip()
+
+    if not question:
+        raise HTTPException(status_code=500, detail="질문 생성에 실패했습니다.")
+
+    session_id = str(uuid4())
+
+    session = SessionData(
+        session_id=session_id,
+        profile_summary=profile_summary,
+        focus_areas=focus_areas,
+        previous_questions=[question],
+        history=[],
+    )
+    SESSIONS[session_id] = session
+
+    return SessionInitResponse(
+        session_id=session_id,
+        profile_summary=profile_summary,
+        focus_areas=focus_areas,
+        question=question,
+    )
+
+
+@app.post("/api/v1/interview/session/answer", response_model=SessionAnswerResponse)
+def session_answer(req: SessionAnswerRequest):
+    session = SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    if not session.previous_questions:
+        raise HTTPException(status_code=400, detail="세션에 질문이 없습니다.")
+
+    current_question = session.previous_questions[-1]
+
+    state_for_coaching: InterviewState = {
+        "question": current_question,
+        "answer": req.answer,
+        "profile_summary": session.profile_summary,
+    }
+    coached_state = coaching_node(state_for_coaching)
+    feedback = coached_state.get("feedback", "").strip()
+
+    session.history.append(
+        QAHistoryItem(
+            question=current_question,
+            answer=req.answer,
+            feedback=feedback,
+        )
+    )
+
+    next_question: Optional[str] = None
+    finished = False
+
+    if len(session.previous_questions) >= MAX_QUESTIONS_PER_SESSION:
+        finished = True
+    else:
+        state_for_question: InterviewState = {
+            "profile_summary": session.profile_summary,
+            "focus_areas": session.focus_areas,
+            "previous_questions": session.previous_questions,
+        }
+        q_state = question_node(state_for_question)
+        candidate = q_state.get("question", "").strip()
+
+        if candidate:
+            next_question = candidate
+            session.previous_questions.append(candidate)
+        else:
+            finished = True
+
+    return SessionAnswerResponse(
+        question=current_question,
+        answer=req.answer,
+        feedback=feedback,
+        next_question=next_question,
+        finished=finished,
+    )

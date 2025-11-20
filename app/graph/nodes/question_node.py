@@ -10,11 +10,12 @@ def question_node(state: InterviewState) -> InterviewState:
 
     profile_summary = state.get("profile_summary", "")
     focus_areas = state.get("focus_areas", [])
+    previous_questions = state.get("previous_questions", [])
 
     if not profile_summary.strip():
         raise ValueError("profile_summary가 비어 있어 질문을 생성할 수 없습니다.")
     
-    question_prompt = build_question_prompt(profile_summary, focus_areas)
+    question_prompt = build_question_prompt(profile_summary, focus_areas, previous_questions)
 
     content = llm.chat(
         messages=[

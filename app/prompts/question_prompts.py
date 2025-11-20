@@ -11,18 +11,28 @@ QUESTION_GENERATION_SYSTEM_PROMPT = """
 - 구체적이고 실무 기반일 것
 - 오직 하나의 질문 문장만 출력할 것 (앞뒤 설명, 번호, 불릿 금지)
 - 질문이 너무 길지 않을 것 (공백 포함 했을 때 글자수 140자 이내)
+- 같은 세션 내에서 이전에 물어본 질문과 의미가 겹치지 않게 할 것
 """
 
 
-def build_question_prompt(profile_summary: str, focus_areas: list[str]) -> str:
+def build_question_prompt(profile_summary: str, focus_areas: list[str], previous_questions: list[str] | None = None) -> str:
     focus_block = "\n".join(f"- {item}" for item in focus_areas) if focus_areas else "(없음)"
+
+    prev_block = ""
+    if previous_questions:
+        prev_qs = "\n".join(f"- {q}" for q in previous_questions)
+        prev_block = f"""
+            [already_asked_questions]
+            {prev_qs}
+        """
+
     return f"""
         [profile_summary]
         {profile_summary}
 
         [focus_areas]
         {focus_block}
-
+        {prev_block}
         위 정보를 바탕으로, 지원자의 경험과 JD 요구사항을 잘 드러낼 수 있는
         핵심 인터뷰 질문 하나를 한국어로 생성해 주세요.
     """
