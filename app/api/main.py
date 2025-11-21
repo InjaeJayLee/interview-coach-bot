@@ -1,8 +1,14 @@
+import os
+import tempfile
+import shutil
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Literal
 from uuid import uuid4
 
+from app.audio.transcriber import transcriber
 from app.graph.graph_builder import build_profile_question_graph
 from app.graph.nodes.coaching_node import coaching_node
 from app.graph.nodes.question_node import question_node
@@ -34,6 +40,15 @@ app = FastAPI(
     title="Interview Coaching Bot API",
     version="0.1.0",
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 graph = build_profile_question_graph()
 
@@ -191,9 +206,35 @@ async def session_answer_audio(session_id: str = Form(...), audio_file: UploadFi
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
-    dummy_text = "테스트 완료"
+    tmp_path = None
+    try:
+        suffix = os.path.splitext(audio_file.filename or "")[1] or ".wav"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_path = tmp.name
+            shutil.copyfileobj(audio_file.file, tmp)
 
-    return _handle_session_answer(session, dummy_text)
+        text = transcriber.transcribe(tmp_path, language="ko")
+
+    except Exception as e:
+        print("[session_answer_audio] STT error:", repr(e))
+        raise HTTPException(status_code=500, detail="음성 인식 중 오류가 발생했습니다.")
+    finally:
+        # 업로드 파일 스트림 닫기
+        try:
+            audio_file.file.close()
+        except Exception:
+            pass
+        # 임시 파일 삭제
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    if not text:
+        raise HTTPException(status_code=400, detail="음성에서 내용을 인식하지 못했습니다.")
+
+    return _handle_session_answer(session, text)
 
 
 @app.post("/api/v1/interview/session/summary", response_model=SessionSummaryResponse)
