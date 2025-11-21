@@ -101,6 +101,7 @@ class SessionAnswerResponse(BaseModel):
     feedback: str
     next_question: Optional[str] = None
     finished: bool
+    recognized_answer: Optional[str] = None
 
 
 class SessionSummaryRequest(BaseModel):
@@ -234,7 +235,7 @@ async def session_answer_audio(session_id: str = Form(...), audio_file: UploadFi
     if not text:
         raise HTTPException(status_code=400, detail="음성에서 내용을 인식하지 못했습니다.")
 
-    return _handle_session_answer(session, text)
+    return _handle_session_answer(session, text, text)
 
 
 @app.post("/api/v1/interview/session/summary", response_model=SessionSummaryResponse)
@@ -269,9 +270,12 @@ def session_summary(req: SessionSummaryRequest):
     )
 
 
-def _handle_session_answer(session: SessionData, answer_text: str) -> SessionAnswerResponse:
+def _handle_session_answer(session: SessionData, answer_text: str, recognized_answer: Optional[str] = None) -> SessionAnswerResponse:
     if not session.previous_questions:
         raise HTTPException(status_code=400, detail="세션에 질문이 없습니다.")
+    
+    if recognized_answer is None:
+        recognized_answer = answer_text
 
     current_question = session.previous_questions[-1]
 
@@ -319,4 +323,5 @@ def _handle_session_answer(session: SessionData, answer_text: str) -> SessionAns
         feedback=feedback,
         next_question=next_question,
         finished=finished,
+        recognized_answer=recognized_answer,
     )
