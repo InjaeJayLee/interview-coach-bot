@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional, Literal
 from uuid import uuid4
@@ -183,6 +183,17 @@ def session_answer(req: SessionAnswerRequest):
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
     return _handle_session_answer(session, req.answer)
+
+
+@app.post("/api/v1/interview/session/answer/audio", response_model=SessionAnswerResponse)
+async def session_answer_audio(session_id: str = Form(...), audio_file: UploadFile = File(...)):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    dummy_text = "테스트 완료"
+
+    return _handle_session_answer(session, dummy_text)
 
 
 @app.post("/api/v1/interview/session/summary", response_model=SessionSummaryResponse)
