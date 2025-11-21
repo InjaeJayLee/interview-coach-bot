@@ -182,56 +182,7 @@ def session_answer(req: SessionAnswerRequest):
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
-    if not session.previous_questions:
-        raise HTTPException(status_code=400, detail="세션에 질문이 없습니다.")
-
-    current_question = session.previous_questions[-1]
-
-    feedback = ""  # mock일 경우 비어있는 string
-    if session.mode == "practice":
-        state_for_coaching: InterviewState = {
-            "question": current_question,
-            "answer": req.answer,
-            "profile_summary": session.profile_summary,
-        } 
-        coached_state = coaching_node(state_for_coaching)
-        feedback = coached_state.get("feedback", "").strip()    
-
-    session.history.append(
-        QAHistoryItem(
-            question=current_question,
-            answer=req.answer,
-            feedback=feedback,
-        )
-    )
-
-    next_question: Optional[str] = None
-    finished = False
-
-    if len(session.previous_questions) >= MAX_QUESTIONS_PER_SESSION:
-        finished = True
-    else:
-        state_for_question: InterviewState = {
-            "profile_summary": session.profile_summary,
-            "focus_areas": session.focus_areas,
-            "previous_questions": session.previous_questions,
-        }
-        q_state = question_node(state_for_question)
-        candidate = q_state.get("question", "").strip()
-
-        if candidate:
-            next_question = candidate
-            session.previous_questions.append(candidate)
-        else:
-            finished = True
-
-    return SessionAnswerResponse(
-        question=current_question,
-        answer=req.answer,
-        feedback=feedback,
-        next_question=next_question,
-        finished=finished,
-    )
+    return _handle_session_answer(session, req.answer)
 
 
 @app.post("/api/v1/interview/session/summary", response_model=SessionSummaryResponse)
@@ -263,4 +214,57 @@ def session_summary(req: SessionSummaryRequest):
 
     return SessionSummaryResponse(
         overall_feedback=overall_feedback,
+    )
+
+
+def _handle_session_answer(session: SessionData, answer_text: str) -> SessionAnswerResponse:
+    if not session.previous_questions:
+        raise HTTPException(status_code=400, detail="세션에 질문이 없습니다.")
+
+    current_question = session.previous_questions[-1]
+
+    feedback = ""  # mock일 경우 비어있는 string
+    if session.mode == "practice":
+        state_for_coaching: InterviewState = {
+            "question": current_question,
+            "answer": answer_text,
+            "profile_summary": session.profile_summary,
+        }
+        coached_state = coaching_node(state_for_coaching)
+        feedback = coached_state.get("feedback", "").strip()
+
+    session.history.append(
+        QAHistoryItem(
+            question=current_question,
+            answer=answer_text,
+            feedback=feedback,
+        )
+    )
+
+    next_question: Optional[str] = None
+    finished = False
+
+    if len(session.previous_questions) >= MAX_QUESTIONS_PER_SESSION:
+        finished = True
+    else:
+        state_for_question: InterviewState = {
+            "profile_summary": session.profile_summary,
+            "focus_areas": session.focus_areas,
+            "previous_questions": session.previous_questions,
+        }
+        q_state = question_node(state_for_question)
+        candidate = q_state.get("question", "").strip()
+
+        if candidate:
+            next_question = candidate
+            session.previous_questions.append(candidate)
+        else:
+            finished = True
+
+    return SessionAnswerResponse(
+        question=current_question,
+        answer=answer_text,
+        feedback=feedback,
+        next_question=next_question,
+        finished=finished,
     )
