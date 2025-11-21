@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from uuid import uuid4
 
 from app.graph.graph_builder import build_profile_question_graph
 from app.graph.nodes.coaching_node import coaching_node
 from app.graph.nodes.question_node import question_node
+from app.graph.nodes.summary_node import summary_node
 from app.graph.state import InterviewState
 
 
@@ -14,7 +15,7 @@ MAX_QUESTIONS_PER_SESSION = 5
 class QAHistoryItem(BaseModel):
     question: str
     answer: str
-    feedback: str
+    feedback: str = ""
 
 
 class SessionData(BaseModel):
@@ -23,6 +24,7 @@ class SessionData(BaseModel):
     focus_areas: list[str]
     previous_questions: list[str]
     history: list[QAHistoryItem]
+    mode: Literal["practice", "mock"] = "practice"
 
 
 SESSIONS: dict[str, SessionData] = {}
@@ -63,6 +65,7 @@ class SessionInitRequest(BaseModel):
     resume_text: str
     job_description: str
     career_note: Optional[str] = None
+    mode: Literal["practice", "mock"] = "practice"
 
 
 class SessionInitResponse(BaseModel):
@@ -83,6 +86,14 @@ class SessionAnswerResponse(BaseModel):
     feedback: str
     next_question: Optional[str] = None
     finished: bool
+
+
+class SessionSummaryRequest(BaseModel):
+    session_id: str
+
+
+class SessionSummaryResponse(BaseModel):
+    overall_feedback: str
 
 
 @app.get("/health")
@@ -153,6 +164,7 @@ def session_init(req: SessionInitRequest):
         focus_areas=focus_areas,
         previous_questions=[question],
         history=[],
+        mode=req.mode,
     )
     SESSIONS[session_id] = session
 
@@ -175,13 +187,15 @@ def session_answer(req: SessionAnswerRequest):
 
     current_question = session.previous_questions[-1]
 
-    state_for_coaching: InterviewState = {
-        "question": current_question,
-        "answer": req.answer,
-        "profile_summary": session.profile_summary,
-    }
-    coached_state = coaching_node(state_for_coaching)
-    feedback = coached_state.get("feedback", "").strip()
+    feedback = ""  # mock일 경우 비어있는 string
+    if session.mode == "practice":
+        state_for_coaching: InterviewState = {
+            "question": current_question,
+            "answer": req.answer,
+            "profile_summary": session.profile_summary,
+        } 
+        coached_state = coaching_node(state_for_coaching)
+        feedback = coached_state.get("feedback", "").strip()    
 
     session.history.append(
         QAHistoryItem(
@@ -217,4 +231,36 @@ def session_answer(req: SessionAnswerRequest):
         feedback=feedback,
         next_question=next_question,
         finished=finished,
+    )
+
+
+@app.post("/api/v1/interview/session/summary", response_model=SessionSummaryResponse)
+def session_summary(req: SessionSummaryRequest):
+    session = SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    if not session.history:
+        raise HTTPException(status_code=400, detail="아직 답변 기록이 없습니다.")
+
+    qa_history = [
+        {
+            "question": item.question,
+            "answer": item.answer,
+            "feedback": item.feedback,
+        }
+        for item in session.history
+    ]
+
+    state_for_summary: InterviewState = {
+        "profile_summary": session.profile_summary,
+        "focus_areas": session.focus_areas,
+        "qa_history": qa_history,
+    }
+
+    final_state = summary_node(state_for_summary)
+    overall_feedback = final_state.get("overall_feedback", "").strip()
+
+    return SessionSummaryResponse(
+        overall_feedback=overall_feedback,
     )
