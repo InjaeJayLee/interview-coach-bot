@@ -3,6 +3,7 @@ import tempfile
 import shutil
 from urllib.parse import quote
 
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, APIRouter
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,7 @@ from app.graph.state import InterviewState
 
 VOICE = "ko-KR-SunHiNeural"
 
-MAX_QUESTIONS_PER_SESSION = 2
+MAX_QUESTIONS_PER_SESSION = 4
 
 
 class QAHistoryItem(BaseModel):
@@ -83,6 +84,10 @@ class CoachingRequest(BaseModel):
 
 class CoachingResponse(BaseModel):
     feedback: str
+
+
+class AudioTranscriptionResponse(BaseModel):
+    recognized_answer: str
 
 
 # 세션용
@@ -205,6 +210,44 @@ def session_init(req: SessionInitRequest):
         question=question,
         tts_question_url=tts_question_url,
     )
+
+
+@app.post("/api/v1/interview/session/transcribe", response_model=AudioTranscriptionResponse)
+async def session_transcribe_audio(
+    session_id: str = Form(...),
+    audio_file: UploadFile = File(...),
+):
+    session = SESSIONS.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    tmp_path = None
+    try:
+        suffix = os.path.splitext(audio_file.filename or "")[1] or ".wav"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_path = tmp.name
+            shutil.copyfileobj(audio_file.file, tmp)
+
+        text = transcriber.transcribe(tmp_path, language="ko")
+
+    except Exception as e:
+        print("[session_transcribe_audio] STT error:", repr(e))
+        raise HTTPException(status_code=500, detail="음성 인식 중 오류가 발생했습니다.")
+    finally:
+        try:
+            audio_file.file.close()
+        except Exception:
+            pass
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    if not text:
+        raise HTTPException(status_code=400, detail="음성에서 내용을 인식하지 못했습니다.")
+
+    return AudioTranscriptionResponse(recognized_answer=text)
 
 
 @app.post("/api/v1/interview/session/answer", response_model=SessionAnswerResponse)

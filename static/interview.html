@@ -26,12 +26,29 @@
         .label {
             font-weight: 600;
         }
-        #feedback, #recognizedAnswer, #finalSummary, #questionText {
+        #questionText {
             white-space: pre-wrap;
             background: #f8f8f8;
             padding: 8px;
             border-radius: 4px;
             margin-top: 4px;
+        }
+        #feedback {
+            background: #f5faf8;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #d4ece0;
+            margin-top: 4px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #234e38;
+        }
+        .feedback-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .feedback-list li {
+            margin-bottom: 4px;
         }
         button {
             padding: 8px 14px;
@@ -47,6 +64,7 @@
             color: #666;
         }
 
+        /* 종합 피드백 카드 스타일 (summary 전용) */
         #finalSummary {
             background: #fdfdfd;
             padding: 16px 18px;
@@ -99,9 +117,8 @@
     <p class="small">
         1) 이력서 / JD를 입력하고 세션을 시작하세요.<br>
         2) 질문이 자동으로 재생됩니다.<br>
-        3) "답변 녹음 시작" → "녹음 종료 & 전송" 버튼으로 음성 답변을 보내면<br>
-        &nbsp;&nbsp;&nbsp;답변에 대한 요약된 피드백을 보여주며 다음 질문이 재생됩니다.<br>
-        4) 인터뷰 종료시 종합적인 피드백을 볼 수 있습니다.
+        3) "답변 녹음 시작" → "녹음 종료" 후 인식된 텍스트를 확인/수정하고 전송하세요.<br>
+        4) 인터뷰 종료 시 종합적인 피드백을 볼 수 있습니다.
     </p>
 
     <!-- 1. 세션 설정 -->
@@ -131,14 +148,16 @@
         <div class="label">답변 녹음</div>
         <button id="recordBtn" onclick="toggleRecording()" disabled>답변 녹음 시작</button>
         <div class="small">
-            * 첫 번째 클릭: 마이크 권한 요청 후 녹음 시작<br>
-            * 두 번째 클릭: 녹음 종료 & 서버로 전송
+            * 첫 클릭: 마이크 권한 요청 후 녹음 시작<br>
+            * 두 번째 클릭: 녹음 종료 → 인식된 답변 확인 & 수정 후 전송
         </div>
 
-        <div class="label" style="margin-top: 12px;">인식된 텍스트</div>
-        <div id="recognizedAnswer">-</div>
+        <div class="label" style="margin-top: 12px;">인식된 답변 (수정 가능)</div>
+        <textarea id="recognizedAnswerInput" placeholder="여기에 음성 인식 결과가 표시됩니다. 필요하면 수정하세요." style="width: 100%; min-height: 80px;"></textarea>
 
-        <div class="label" style="margin-top: 12px;">피드백</div>
+        <button id="sendTextBtn" onclick="sendTextAnswer()" disabled>답변 전송</button>
+
+        <div class="label" style="margin-top: 12px;">현재 질문/답변에 대한 피드백</div>
         <div id="feedback">-</div>
     </div>
 
@@ -191,11 +210,11 @@
                 // 첫 질문 TTS 자동 재생
                 playTTS(data.question);
 
-                // 녹음 버튼 활성화
+                // 녹음 버튼 활성화 및 초기화
                 document.getElementById("recordBtn").disabled = false;
                 document.getElementById("recordBtn").textContent = "답변 녹음 시작";
                 document.getElementById("feedback").textContent = "-";
-                document.getElementById("recognizedAnswer").textContent = "-";
+                document.getElementById("recognizedAnswerInput").value = "";
                 document.getElementById("finalSummary").textContent = "-";
 
             } catch (e) {
@@ -225,7 +244,7 @@
             const btn = document.getElementById("recordBtn");
 
             if (!isRecording) {
-                // 🔹 녹음 시작
+                // 녹음 시작
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     audioChunks = [];
@@ -239,82 +258,139 @@
 
                     mediaRecorder.onstop = async () => {
                         const blob = new Blob(audioChunks, { type: "audio/webm" });
-                        await sendAnswerAudio(blob);
+                        await sendTranscription(blob);
                         // 스트림 정리
                         stream.getTracks().forEach(track => track.stop());
                     };
 
                     mediaRecorder.start();
                     isRecording = true;
-                    btn.textContent = "녹음 종료 & 전송";
-
+                    btn.textContent = "녹음 종료 (음성 답변 인식 실행)";
                 } catch (e) {
                     console.error("마이크 권한 오류:", e);
                     alert("마이크 권한을 허용해야 녹음할 수 있습니다.");
                 }
             } else {
-                // 🔹 녹음 중지 → onstop에서 서버 전송
+                // 녹음 중지 → onstop에서 STT 호출
                 mediaRecorder.stop();
                 isRecording = false;
-                btn.textContent = "답변 전송 중...";
+                btn.textContent = "답변 인식 중...";
                 btn.disabled = true;
             }
         }
 
-        async function sendAnswerAudio(blob) {
+        async function sendTranscription(blob) {
             if (!sessionId) return;
+
+            const recordBtn = document.getElementById("recordBtn");
+            const sendTextBtn = document.getElementById("sendTextBtn");
+            const input = document.getElementById("recognizedAnswerInput");
 
             try {
                 const fd = new FormData();
                 fd.append("session_id", sessionId);
-                fd.append("audio_file", blob, "answer.webm");  // 백엔드에서 ffmpeg로 처리 가능해야 함
+                fd.append("audio_file", blob, "answer.webm");
 
-                const res = await fetch("/api/v1/interview/session/answer/audio", {
+                const res = await fetch("/api/v1/interview/session/transcribe", {
                     method: "POST",
                     body: fd
                 });
 
-                const btn = document.getElementById("recordBtn");
+                if (!res.ok) {
+                    const text = await res.text();
+                    alert("음성 인식 실패: " + text);
+                    recordBtn.textContent = "답변 녹음 시작";
+                    recordBtn.disabled = false;
+                    return;
+                }
+
+                const data = await res.json();
+                input.value = data.recognized_answer || "";
+                if (!input.value) {
+                    input.placeholder = "음성에서 내용을 인식하지 못했습니다. 직접 입력해 주세요.";
+                }
+
+                // 이제 텍스트를 확인/수정하고 보내도록
+                sendTextBtn.disabled = false;
+                recordBtn.textContent = "답변 녹음 다시 하기";
+                recordBtn.disabled = false;
+
+            } catch (e) {
+                console.error(e);
+                alert("음성 인식 중 오류: " + e);
+                recordBtn.textContent = "답변 녹음 시작";
+                recordBtn.disabled = false;
+            }
+        }
+
+        async function sendTextAnswer() {
+            if (!sessionId) {
+                alert("세션이 없습니다. 먼저 세션을 시작하세요.");
+                return;
+            }
+
+            const input = document.getElementById("recognizedAnswerInput");
+            const answerText = input.value.trim();
+            const sendTextBtn = document.getElementById("sendTextBtn");
+            const recordBtn = document.getElementById("recordBtn");
+
+            if (!answerText) {
+                alert("답변 텍스트가 비어 있습니다.");
+                return;
+            }
+
+            sendTextBtn.disabled = true;
+            sendTextBtn.textContent = "답변 전송 중...";
+
+            try {
+                const res = await fetch("/api/v1/interview/session/answer", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        answer: answerText
+                    })
+                });
 
                 if (!res.ok) {
                     const text = await res.text();
                     alert("답변 전송 실패: " + text);
-                    btn.textContent = "답변 녹음 시작";
-                    btn.disabled = false;
+                    sendTextBtn.textContent = "이 텍스트로 답변 전송";
+                    sendTextBtn.disabled = false;
                     return;
                 }
 
                 const data = await res.json();
 
-                // STT 결과 / 피드백 표시
-                document.getElementById("recognizedAnswer").textContent =
-                    data.recognized_answer || "(인식 결과 없음)";
+                // 피드백 표시
                 document.getElementById("feedback").textContent =
                     data.feedback || "(피드백 없음)";
 
                 if (data.finished) {
-                    // 🔚 세션 종료 → 요약 요청
                     document.getElementById("questionText").textContent = "(질문 종료)";
-                    btn.textContent = "세션 종료됨";
-                    btn.disabled = true;
+                    recordBtn.textContent = "세션 종료됨";
+                    recordBtn.disabled = true;
                     await fetchSummary();
                 } else {
-                    // 다음 질문 표시 + TTS 재생
+                    // 다음 질문 + TTS
                     if (data.next_question) {
                         document.getElementById("questionText").textContent = data.next_question;
                         playTTS(data.next_question);
                     }
-                    // 다시 녹음할 수 있게
-                    btn.textContent = "답변 녹음 시작";
-                    btn.disabled = false;
+                    // 다음 답변을 위해 입력창 초기화
+                    input.value = "";
+                    input.placeholder = "다음 답변을 녹음하거나 직접 입력해 주세요.";
+                    sendTextBtn.textContent = "이 텍스트로 답변 전송";
+                    sendTextBtn.disabled = true;  // 다음 녹음/입력 전까지 비활성화
+                    recordBtn.textContent = "답변 녹음 시작";
+                    recordBtn.disabled = false;
                 }
 
             } catch (e) {
                 console.error(e);
                 alert("답변 전송 중 오류: " + e);
-                const btn = document.getElementById("recordBtn");
-                btn.textContent = "답변 녹음 시작";
-                btn.disabled = false;
+                sendTextBtn.textContent = "이 텍스트로 답변 전송";
+                sendTextBtn.disabled = false;
             }
         }
 

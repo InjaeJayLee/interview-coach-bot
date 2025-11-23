@@ -52,9 +52,6 @@ class OpenAILLMClient(LLMClient):
             params["max_tokens"] = max_tokens
 
         resp = self.client.chat.completions.create(**params)
-        # print(resp.choices)
-        # print()
-        # print()
         return resp.choices[0].message.content or ""
 
 
