@@ -36,11 +36,6 @@ PROFILE_SUMMARY_SYSTEM_PROMPT = """
 
 
 def build_profile_prompt(resume_text: str, job_description: str, career_note: str | None = None) -> str:
-    """
-    이력서/경력기술서 + JD + career_note(optional)를 하나의 유저 프롬프트로 합쳐주는 헬퍼 함수.
-    LangGraph 노드(profile_node)에서 messages에 넣어 사용.
-    """
-
     career_note_block = ""
     if career_note:
         career_note_block = f"\n[추가 자기소개/설명]\n{career_note}\n"
