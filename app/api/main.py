@@ -1,12 +1,17 @@
 import os
 import tempfile
 import shutil
+from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, APIRouter
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional, Literal
+from typing import Optional, Literal, AsyncGenerator
 from uuid import uuid4
+import edge_tts
+
 
 from app.audio.transcriber import transcriber
 from app.graph.graph_builder import build_profile_question_graph
@@ -16,7 +21,10 @@ from app.graph.nodes.summary_node import summary_node
 from app.graph.state import InterviewState
 
 
-MAX_QUESTIONS_PER_SESSION = 5
+VOICE = "ko-KR-SunHiNeural"
+
+MAX_QUESTIONS_PER_SESSION = 2
+
 
 class QAHistoryItem(BaseModel):
     question: str
@@ -40,6 +48,8 @@ app = FastAPI(
     title="Interview Coaching Bot API",
     version="0.1.0",
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -88,6 +98,7 @@ class SessionInitResponse(BaseModel):
     profile_summary: str
     focus_areas: list[str]
     question: str
+    tts_question_url: Optional[str] = None
 
 
 class SessionAnswerRequest(BaseModel):
@@ -102,6 +113,7 @@ class SessionAnswerResponse(BaseModel):
     next_question: Optional[str] = None
     finished: bool
     recognized_answer: Optional[str] = None
+    next_question_tts_url: Optional[str] = None
 
 
 class SessionSummaryRequest(BaseModel):
@@ -184,11 +196,14 @@ def session_init(req: SessionInitRequest):
     )
     SESSIONS[session_id] = session
 
+    tts_question_url = f"/tts/stream?text={quote(question)}"
+
     return SessionInitResponse(
         session_id=session_id,
         profile_summary=profile_summary,
         focus_areas=focus_areas,
         question=question,
+        tts_question_url=tts_question_url,
     )
 
 
@@ -279,15 +294,13 @@ def _handle_session_answer(session: SessionData, answer_text: str, recognized_an
 
     current_question = session.previous_questions[-1]
 
-    feedback = ""  # mock일 경우 비어있는 string
-    if session.mode == "practice":
-        state_for_coaching: InterviewState = {
-            "question": current_question,
-            "answer": answer_text,
-            "profile_summary": session.profile_summary,
-        }
-        coached_state = coaching_node(state_for_coaching)
-        feedback = coached_state.get("feedback", "").strip()
+    state_for_coaching: InterviewState = {
+        "question": current_question,
+        "answer": answer_text,
+        "profile_summary": session.profile_summary,
+    }
+    coached_state = coaching_node(state_for_coaching)
+    feedback = coached_state.get("feedback", "").strip()
 
     session.history.append(
         QAHistoryItem(
@@ -299,6 +312,7 @@ def _handle_session_answer(session: SessionData, answer_text: str, recognized_an
 
     next_question: Optional[str] = None
     finished = False
+    next_question_tts_url: Optional[str] = None
 
     if len(session.previous_questions) >= MAX_QUESTIONS_PER_SESSION:
         finished = True
@@ -314,6 +328,7 @@ def _handle_session_answer(session: SessionData, answer_text: str, recognized_an
         if candidate:
             next_question = candidate
             session.previous_questions.append(candidate)
+            next_question_tts_url = f"/tts/stream?text={quote(candidate)}"
         else:
             finished = True
 
@@ -324,4 +339,24 @@ def _handle_session_answer(session: SessionData, answer_text: str, recognized_an
         next_question=next_question,
         finished=finished,
         recognized_answer=recognized_answer,
+        next_question_tts_url=next_question_tts_url,
     )
+
+
+
+async def tts_stream_generator(text: str) -> AsyncGenerator[bytes, None]:
+    """
+    Edge TTS로부터 audio chunk를 받아서 그대로 스트리밍하는 generator
+    """
+    communicate = edge_tts.Communicate(text, VOICE)
+
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            if chunk["data"]:
+                yield chunk["data"]
+
+
+@app.get("/tts/stream")
+async def tts_stream(text: str):
+    generator = tts_stream_generator(text)
+    return StreamingResponse(generator, media_type="audio/mpeg")

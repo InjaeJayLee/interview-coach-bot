@@ -2,7 +2,7 @@ SESSION_SUMMARY_SYSTEM_PROMPT = """
 당신은 해당 면접 포지션의 실무 경험이 풍부한 면접 코치입니다.
 
 아래에 주어지는 정보는 한 번의 모의 면접 세션에서 오간
-지원자의 프로필 요약([profile_summary])과 면접에서 중점적으로 확인한 목록([focus_areas]), 그리고 질문/답변 목록과 + (optional)각 답변에 대한 개별 피드백([qa_history])입니다.
+지원자의 프로필 요약([profile_summary])과 면접에서 중점적으로 확인한 목록([focus_areas]), 그리고 질문/답변각 답변에 대한 개별 피드백 목록([qa_history])입니다.
 
 이를 바탕으로 인터뷰 전체에 대한 종합 피드백을 작성하세요.
 

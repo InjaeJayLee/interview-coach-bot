@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>인터뷰 코칭 봇</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 24px auto;
+            padding: 0 16px 32px;
+            line-height: 1.5;
+        }
+        h1 {
+            margin-bottom: 8px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 80px;
+        }
+        .section {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #ddd;
+        }
+        .label {
+            font-weight: 600;
+        }
+        #feedback, #recognizedAnswer, #finalSummary, #questionText {
+            white-space: pre-wrap;
+            background: #f8f8f8;
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 4px;
+        }
+        button {
+            padding: 8px 14px;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .small {
+            font-size: 12px;
+            color: #666;
+        }
+
+        #finalSummary {
+            background: #fdfdfd;
+            padding: 16px 18px;
+            border-radius: 10px;
+            border: 1px solid #e3e3e3;
+            max-height: 320px;
+            overflow-y: auto;
+            margin-top: 8px;
+
+            font-size: 14px;
+            line-height: 1.6;
+            color: #222;
+        }
+
+        #finalSummary h1,
+        #finalSummary h2,
+        #finalSummary h3 {
+            margin: 12px 0 6px;
+            line-height: 1.4;
+            font-weight: 700;
+        }
+
+        #finalSummary h1 {
+            font-size: 20px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 4px;
+        }
+
+        #finalSummary h2 {
+            font-size: 17px;
+        }
+
+        #finalSummary h3 {
+            font-size: 15px;
+            color: #333;
+        }
+
+        #finalSummary ul {
+            margin: 4px 0 10px 18px;
+            padding-left: 0;
+        }
+
+        #finalSummary li {
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>인터뷰 코칭 봇</h1>
+    <p class="small">
+        1) 이력서 / JD를 입력하고 세션을 시작하세요.<br>
+        2) 질문이 자동으로 재생됩니다.<br>
+        3) "답변 녹음 시작" → "녹음 종료 & 전송" 버튼으로 음성 답변을 보내면<br>
+        &nbsp;&nbsp;&nbsp;답변에 대한 요약된 피드백을 보여주며 다음 질문이 재생됩니다.<br>
+        4) 인터뷰 종료시 종합적인 피드백을 볼 수 있습니다.
+    </p>
+
+    <!-- 1. 세션 설정 -->
+    <div class="section">
+        <div class="label">이력서 텍스트</div>
+        <textarea id="resumeText">여기에 이력서 텍스트를 넣으세요.</textarea>
+
+        <div class="label" style="margin-top: 12px;">JD (공고 텍스트)</div>
+        <textarea id="jdText">여기에 JD 텍스트를 넣으세요.</textarea>
+
+        <div class="label" style="margin-top: 12px;">커리어 노트 (선택)</div>
+        <textarea id="careerNote" placeholder="선택사항"></textarea>
+
+        <button id="startBtn" onclick="startSession()">세션 시작</button>
+    </div>
+
+    <!-- 2. 질문 / TTS 재생 -->
+    <div class="section">
+        <div class="label">현재 질문</div>
+        <div id="questionText">-</div>
+
+        <audio id="questionAudio" controls autoplay style="margin-top: 8px; width: 100%;"></audio>
+    </div>
+
+    <!-- 3. 답변 녹음 / STT / 피드백 -->
+    <div class="section">
+        <div class="label">답변 녹음</div>
+        <button id="recordBtn" onclick="toggleRecording()" disabled>답변 녹음 시작</button>
+        <div class="small">
+            * 첫 번째 클릭: 마이크 권한 요청 후 녹음 시작<br>
+            * 두 번째 클릭: 녹음 종료 & 서버로 전송
+        </div>
+
+        <div class="label" style="margin-top: 12px;">인식된 텍스트</div>
+        <div id="recognizedAnswer">-</div>
+
+        <div class="label" style="margin-top: 12px;">피드백</div>
+        <div id="feedback">-</div>
+    </div>
+
+    <!-- 4. 최종 요약 -->
+    <div class="section">
+        <div class="label">인터뷰 종합 피드백</div>
+        <div id="finalSummary">-</div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+
+        async function startSession() {
+            const resumeText = document.getElementById("resumeText").value;
+            const jdText = document.getElementById("jdText").value;
+            const careerNote = document.getElementById("careerNote").value || null;
+
+            const startBtn = document.getElementById("startBtn");
+            startBtn.disabled = true;
+            startBtn.textContent = "세션 생성 중...";
+
+            try {
+                const res = await fetch("/api/v1/interview/session/init", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        resume_text: resumeText,
+                        job_description: jdText,
+                        career_note: careerNote,
+                        mode: "mock"
+                    })
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    alert("세션 생성 실패: " + text);
+                    startBtn.disabled = false;
+                    startBtn.textContent = "세션 시작";
+                    return;
+                }
+
+                const data = await res.json();
+
+                sessionId = data.session_id;
+                document.getElementById("questionText").textContent = data.question;
+
+                // 첫 질문 TTS 자동 재생
+                playTTS(data.question);
+
+                // 녹음 버튼 활성화
+                document.getElementById("recordBtn").disabled = false;
+                document.getElementById("recordBtn").textContent = "답변 녹음 시작";
+                document.getElementById("feedback").textContent = "-";
+                document.getElementById("recognizedAnswer").textContent = "-";
+                document.getElementById("finalSummary").textContent = "-";
+
+            } catch (e) {
+                console.error(e);
+                alert("세션 생성 중 오류: " + e);
+                startBtn.disabled = false;
+                startBtn.textContent = "세션 시작";
+            }
+        }
+
+        function playTTS(text) {
+            if (!text) return;
+            const audio = document.getElementById("questionAudio");
+            const url = "/tts/stream?text=" + encodeURIComponent(text);
+            audio.src = url;
+            audio.play().catch(err => {
+                console.warn("자동 재생 실패 (브라우저 정책일 수 있음):", err);
+            });
+        }
+
+        async function toggleRecording() {
+            if (!sessionId) {
+                alert("세션이 없습니다. 먼저 세션을 시작하세요.");
+                return;
+            }
+
+            const btn = document.getElementById("recordBtn");
+
+            if (!isRecording) {
+                // 🔹 녹음 시작
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    audioChunks = [];
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) {
+                            audioChunks.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        const blob = new Blob(audioChunks, { type: "audio/webm" });
+                        await sendAnswerAudio(blob);
+                        // 스트림 정리
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    btn.textContent = "녹음 종료 & 전송";
+
+                } catch (e) {
+                    console.error("마이크 권한 오류:", e);
+                    alert("마이크 권한을 허용해야 녹음할 수 있습니다.");
+                }
+            } else {
+                // 🔹 녹음 중지 → onstop에서 서버 전송
+                mediaRecorder.stop();
+                isRecording = false;
+                btn.textContent = "답변 전송 중...";
+                btn.disabled = true;
+            }
+        }
+
+        async function sendAnswerAudio(blob) {
+            if (!sessionId) return;
+
+            try {
+                const fd = new FormData();
+                fd.append("session_id", sessionId);
+                fd.append("audio_file", blob, "answer.webm");  // 백엔드에서 ffmpeg로 처리 가능해야 함
+
+                const res = await fetch("/api/v1/interview/session/answer/audio", {
+                    method: "POST",
+                    body: fd
+                });
+
+                const btn = document.getElementById("recordBtn");
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    alert("답변 전송 실패: " + text);
+                    btn.textContent = "답변 녹음 시작";
+                    btn.disabled = false;
+                    return;
+                }
+
+                const data = await res.json();
+
+                // STT 결과 / 피드백 표시
+                document.getElementById("recognizedAnswer").textContent =
+                    data.recognized_answer || "(인식 결과 없음)";
+                document.getElementById("feedback").textContent =
+                    data.feedback || "(피드백 없음)";
+
+                if (data.finished) {
+                    // 🔚 세션 종료 → 요약 요청
+                    document.getElementById("questionText").textContent = "(질문 종료)";
+                    btn.textContent = "세션 종료됨";
+                    btn.disabled = true;
+                    await fetchSummary();
+                } else {
+                    // 다음 질문 표시 + TTS 재생
+                    if (data.next_question) {
+                        document.getElementById("questionText").textContent = data.next_question;
+                        playTTS(data.next_question);
+                    }
+                    // 다시 녹음할 수 있게
+                    btn.textContent = "답변 녹음 시작";
+                    btn.disabled = false;
+                }
+
+            } catch (e) {
+                console.error(e);
+                alert("답변 전송 중 오류: " + e);
+                const btn = document.getElementById("recordBtn");
+                btn.textContent = "답변 녹음 시작";
+                btn.disabled = false;
+            }
+        }
+
+        async function fetchSummary() {
+            if (!sessionId) return;
+            try {
+                const res = await fetch("/api/v1/interview/session/summary", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    alert("세션 요약 실패: " + text);
+                    return;
+                }
+
+                const data = await res.json();
+                renderSummaryMarkdown(data.overall_feedback || "(요약 없음)");
+            } catch (e) {
+                console.error(e);
+                alert("세션 요약 중 오류: " + e);
+            }
+        }
+        
+        function renderSummaryMarkdown(markdown) {
+            if (!markdown) {
+                document.getElementById("finalSummary").textContent = "(요약 없음)";
+                return;
+            }
+
+            let text = markdown
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+            const lines = text.split(/\r?\n/);
+            let html = "";
+            let inList = false;
+
+            for (let rawLine of lines) {
+                const line = rawLine.trim();
+
+                if (line.startsWith("### ")) {
+                    if (inList) { html += "</ul>"; inList = false; }
+                    html += `<h3>${line.substring(4)}</h3>`;
+                } else if (line.startsWith("## ")) {
+                    if (inList) { html += "</ul>"; inList = false; }
+                    html += `<h2>${line.substring(3)}</h2>`;
+                } else if (line.startsWith("# ")) {
+                    if (inList) { html += "</ul>"; inList = false; }
+                    html += `<h1>${line.substring(2)}</h1>`;
+                } else if (line.startsWith("- ")) {
+                    if (!inList) {
+                        html += "<ul>";
+                        inList = true;
+                    }
+                    html += `<li>${line.substring(2)}</li>`;
+                } else if (line === "") {
+                    if (inList) { html += "</ul>"; inList = false; }
+                    html += "<br/>";
+                } else {
+                    if (inList) { html += "</ul>"; inList = false; }
+                    html += `<p>${line}</p>`;
+                }
+            }
+            if (inList) html += "</ul>";
+
+            document.getElementById("finalSummary").innerHTML = html;
+        }
+    </script>
+</body>
+</html>
