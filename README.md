@@ -141,3 +141,25 @@ uvicorn app.api.main:app --reload
 ```
 http://localhost:8000/static/interview.html
 ```
+
+---
+
+## 🔄 어플리케이션 사용 예시
+
+### 1. 이력서, JD 입력
+
+![이력서,JD 입력](images/resume_JD_input.png)
+
+---
+
+### 2. 질문/답변 및 피드백
+
+![Q&A](images/QnA.png)
+
+---
+
+### 3. 종합 리뷰
+
+![Final Summary](images/final_summary.png)
+
+---
