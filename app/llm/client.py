@@ -35,7 +35,7 @@ class OpenAILLMClient(LLMClient):
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.3,
-        max_tokens: int = 2500,
+        max_tokens: int = 3000,
         **kwargs: Any,
     ) -> str:
         params: dict[str, Any] = {
@@ -68,7 +68,7 @@ class AnthropicLLMClient(LLMClient):
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.3,
-        max_tokens: int = 2500,
+        max_tokens: int = 3000,
         **kwargs: Any,
     ) -> str:
         system_prompts = []
